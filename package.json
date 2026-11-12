@@ -1,0 +1,22 @@
+{
+  "name": "weekly-report-bot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Telegram weekly report bot for Notion tasks with Gemini summaries",
+  "main": "index.ts",
+  "scripts": {
+    "dev": "tsx watch index.ts",
+    "start": "tsx index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@google/genai": "^1.10.0",
+    "@types/node": "^24.0.0",
+    "dotenv": "^16.4.5",
+    "grammy": "^1.26.0",
+    "node-cron": "^4.1.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}
