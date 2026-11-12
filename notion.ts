@@ -29,7 +29,7 @@ async function notionFetch(path: string, init?: RequestInit): Promise<any> {
   return res.json();
 }
 
-/** Получаем список всех возможных значений Type и Status (чтобы найти "неиспользованные" категории). */
+/** Get all possible Type and Status values (to find unused categories). */
 export async function fetchSchema(databaseId: string): Promise<Schema> {
   const db = await notionFetch(`/databases/${databaseId}`);
   const typeProp = db.properties?.["Type"];
@@ -50,7 +50,7 @@ export async function fetchSchema(databaseId: string): Promise<Schema> {
   return { typeOptions, statusOptions };
 }
 
-/** Преобразует страницу Notion в Task. */
+/** Convert a Notion page to a Task. */
 function mapTask(page: any): Task {
   const p = page.properties;
   const typeProp = p["Type"];
@@ -60,16 +60,16 @@ function mapTask(page: any): Task {
     id: page.id,
     name:
       (p["Name"]?.title ?? []).map((t: any) => t.plain_text).join("") ||
-      "(без названия)",
+      "(untitled)",
     date: p["Date"]?.date?.start ?? null,
-    status: statusProp?.status?.name ?? statusProp?.select?.name ?? "Без статуса",
+    status: statusProp?.status?.name ?? statusProp?.select?.name ?? "No status",
     types: typeProp?.select
       ? [typeProp.select.name]
       : (typeProp?.multi_select ?? []).map((o: any) => o.name),
   };
 }
 
-/** Задачи с Date в диапазоне [start, end] (формат YYYY-MM-DD, включительно). */
+/** Tasks with Date in the range [start, end] (format YYYY-MM-DD, inclusive). */
 export async function fetchTasks(
   databaseId: string,
   start: string,
@@ -99,10 +99,10 @@ export async function fetchTasks(
     cursor = data.has_more ? data.next_cursor : undefined;
   } while (cursor);
 
-  return tasks;
+  return tasks; //status is ok just like in Notion
 }
 
-/** Все задачи из базы без фильтра по дате. */
+/** All tasks in the database without a date filter. */
 export async function fetchAllTasks(databaseId: string): Promise<Task[]> {
   const tasks: Task[] = [];
   let cursor: string | undefined;
@@ -125,7 +125,7 @@ export async function fetchAllTasks(databaseId: string): Promise<Task[]> {
   return tasks;
 }
 
-/** ID всех (не архивных) страниц базы — без фильтра по дате. */
+/** IDs of all non-archived pages in the database — without a date filter. */
 export async function fetchAllPageIds(databaseId: string): Promise<string[]> {
   const ids: string[] = [];
   let cursor: string | undefined;
@@ -142,7 +142,7 @@ export async function fetchAllPageIds(databaseId: string): Promise<string[]> {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Архивирует страницу (уходит в корзину Notion, можно восстановить). С ретраем на rate limit. */
+/** Archive a page (moves it to Notion Trash, where it can be restored). Retries on rate limits. */
 export async function archivePage(pageId: string): Promise<void> {
   for (let attempt = 0; ; attempt++) {
     try {
@@ -162,7 +162,7 @@ export async function archivePage(pageId: string): Promise<void> {
   }
 }
 
-/** Архивирует список страниц последовательно (≈3 запроса/сек лимит Notion). */
+/** Archive pages sequentially (≈3 requests/sec due to Notion limits). */
 export async function archivePages(
   ids: string[]
 ): Promise<{ archived: number; failed: number }> {
@@ -173,7 +173,7 @@ export async function archivePages(
       await archivePage(id);
       archived++;
     } catch (e) {
-      console.error("Не удалось архивировать", id, e);
+      console.error("Failed to archive", id, e);
       failed++;
     }
     await sleep(350);

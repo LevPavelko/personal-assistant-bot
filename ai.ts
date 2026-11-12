@@ -10,36 +10,36 @@ export async function summarizeWeek(
   start: string,
   end: string
 ): Promise<string> {
-  const prompt = `Ты — личный ассистент по продуктивности. Проанализируй задачи пользователя за неделю ${start} — ${end}.
+  const prompt = `You are a personal productivity assistant. Analyze the user's tasks for the week ${start} — ${end}.
 
-Задачи (JSON):
+Tasks (JSON):
 ${JSON.stringify(tasks.map(({ id, ...t }) => t), null, 2)}
 
-Посчитанные метрики (JSON):
+Calculated metrics (JSON):
 ${JSON.stringify(
   {
     total: metrics.total,
     done: metrics.done,
     notDone: metrics.notDone,
     byType: metrics.byType,
-    unusedTypes: metrics.unusedTypes,
   },
   null,
   2
 )}
 
-Напиши краткое summary на русском языке (до 150 слов):
-1. Главное, что было сделано за неделю.
-2. На что ушло больше всего времени и что было упущено (категории без задач).
-3. Что осталось незавершённым и на что обратить внимание.
-4. Один конкретный совет на следующую неделю.
+Write a brief summary in English (up to 150 words):
+1. What was the main progress during the week.
+2. Where most time went and what was missed.
+3. What remains unfinished and what deserves attention.
+4. One concrete suggestion for the next week.
 
-Правила: обычный текст без Markdown-разметки (без *, #, _), можно использовать эмодзи и короткие абзацы. Не выдумывай факты, опирайся только на данные.`;
+Rules: plain text without Markdown formatting (no *, #, _), emoji and short paragraphs are allowed. Do not invent facts; rely only on the data. Tasks are written in Russian, English and German so you have to transtale them to english first. Make no greetings`;
 
   const res = await ai.models.generateContent({
     model: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
     contents: prompt,
   });
 
-  return res.text?.trim() || "Не удалось получить summary от Gemini.";
+
+  return res.text || "Something went wrong.";
 }

@@ -1,9 +1,7 @@
 import type { Metrics } from "./metrics.js";
 
-const GREEN = "#4CAF50";
-const ORANGE = "#FF9800";
 
-/** Рендер через QuickChart (Chart.js v4) -> PNG. Наружу уходят только названия категорий и числа. */
+/** Render via QuickChart (Chart.js v4) -> PNG. Only category names and numbers leave the app. */
 async function renderChart(chart: object, width: number, height: number): Promise<Buffer> {
   const res = await fetch("https://quickchart.io/chart", {
     method: "POST",
@@ -24,17 +22,17 @@ async function renderChart(chart: object, width: number, height: number): Promis
   return Buffer.from(await res.arrayBuffer());
 }
 
-/** Пончик: завершено / не завершено. */
+/** Donut: completed / in progress / not started. */
 export function completionChart(m: Metrics, start: string, end: string): Promise<Buffer> {
   return renderChart(
     {
       type: "doughnut",
       data: {
-        labels: ["Завершено", "Не завершено"],
+        labels: ["Completed", "In Progress", "Not Started"],
         datasets: [
           {
-            data: [m.done || null, m.notDone || null], // null — чтобы не рисовать "0"
-            backgroundColor: [GREEN, ORANGE],
+            data: [m.done || null, m.inProgress || null, m.notStarted || null],
+            backgroundColor: ["rgb(31 166 0 / 0.78)", "rgb(74 126 255 / 0.78)", "rgb(244 0 0 / 0.78)"],
           },
         ],
       },
@@ -42,7 +40,7 @@ export function completionChart(m: Metrics, start: string, end: string): Promise
         plugins: {
           title: {
             display: true,
-            text: [`Выполнено ${m.done} из ${m.total} (${m.donePct}%)`, `${start} — ${end}`],
+            text: [`Completed ${m.done} of ${m.total} (${m.donePct}%)`, `${start} — ${end}`],
             font: { size: 20 },
           },
           legend: { position: "bottom", labels: { font: { size: 16 } } },
@@ -55,16 +53,14 @@ export function completionChart(m: Metrics, start: string, end: string): Promise
   );
 }
 
-/** Горизонтальные столбцы по категориям (включая категории с 0 задач). */
+/** Horizontal bars by category (including zero-task categories). */
 export function categoriesChart(m: Metrics): Promise<Buffer> {
-  const rows = [
-    ...m.byType.map((t) => ({
-      label: t.type,
-      done: t.done,
-      notDone: t.total - t.done,
-    })),
-    ...m.unusedTypes.map((t) => ({ label: `${t} (0)`, done: 0, notDone: 0 })),
-  ];
+  const rows = m.byType.map((t) => ({
+    label: t.type,
+    done: t.done,
+    inProgress: t.inProgress,
+    notStarted: t.notStarted,
+  }));
 
   const height = Math.max(350, 140 + rows.length * 55);
 
@@ -74,14 +70,15 @@ export function categoriesChart(m: Metrics): Promise<Buffer> {
       data: {
         labels: rows.map((r) => r.label),
         datasets: [
-          { label: "Завершено", data: rows.map((r) => r.done || null), backgroundColor: GREEN },
-          { label: "Не завершено", data: rows.map((r) => r.notDone || null), backgroundColor: ORANGE },
+          { label: "Completed", data: rows.map((r) => r.done || null), backgroundColor: "rgb(31 166 0 / 0.78)" },
+          { label: "In Progress", data: rows.map((r) => r.inProgress || null), backgroundColor: "rgb(74 126 255 / 0.78)" },
+          { label: "Not Started", data: rows.map((r) => r.notStarted || null), backgroundColor: "rgb(244 0 0 / 0.78)" },
         ],
       },
       options: {
         indexAxis: "y",
         plugins: {
-          title: { display: true, text: "Категории: куда ушло время", font: { size: 20 } },
+          title: { display: true, text: "Categories: where time went", font: { size: 20 } },
           legend: { position: "bottom", labels: { font: { size: 16 } } },
           datalabels: { color: "#fff", font: { size: 16, weight: "bold" } },
         },
@@ -91,7 +88,7 @@ export function categoriesChart(m: Metrics): Promise<Buffer> {
         },
       },
     },
-    800,
+    900,
     height
   );
 }

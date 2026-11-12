@@ -1,54 +1,79 @@
-import type { Task, Schema } from "./notion.js";
+import type { Task } from "./notion.js";
 
 export type Metrics = {
   total: number;
   done: number;
+  inProgress: number;
+  notStarted: number;
   notDone: number;
   donePct: number;
   byStatus: [string, number][];
-  byType: { type: string; total: number; done: number }[];
-  unusedTypes: string[];
+  byType: { type: string; total: number; done: number; inProgress: number; notStarted: number }[];
   notDoneTasks: Task[];
 };
 
-const NO_TYPE = "Без категории";
+const NO_TYPE = "No category";
+
+function normalizeStatusValue(value: string): string {
+  return value.trim().toLowerCase().replace(/[\s_-]+/g, " ");
+}
 
 export function computeMetrics(
   tasks: Task[],
-  schema: Schema,
-  doneStatuses: string[]
+  doneStatuses: string[],
+  inProgressStatuses: string[] = [],
+  notStartedStatuses: string[] = []
 ): Metrics {
-  const doneSet = new Set(doneStatuses.map((s) => s.trim().toLowerCase()));
-  const isDone = (t: Task) => doneSet.has(t.status.toLowerCase());
+  const doneSet = new Set(doneStatuses.map((s) => normalizeStatusValue(s)));
+  const inProgressSet = new Set(inProgressStatuses.map((s) => normalizeStatusValue(s)));
+  const notStartedSet = new Set(notStartedStatuses.map((s) => normalizeStatusValue(s)));
+
+  const isDone = (t: Task) => doneSet.has(normalizeStatusValue(t.status));
+  const isInProgress = (t: Task) => inProgressSet.has(normalizeStatusValue(t.status));
+  const isNotStarted = (t: Task) => notStartedSet.has(normalizeStatusValue(t.status));
 
   const statusMap = new Map<string, number>();
-  const typeMap = new Map<string, { total: number; done: number }>();
+  const typeMap = new Map<string, { total: number; done: number; inProgress: number; notStarted: number }>();
+
+  let done = 0;
+  let inProgress = 0;
+  let notStarted = 0;
 
   for (const t of tasks) {
     statusMap.set(t.status, (statusMap.get(t.status) ?? 0) + 1);
 
+    if (isDone(t)) {
+      done++;
+    } else if (isInProgress(t) || normalizeStatusValue(t.status) === "in progress" || normalizeStatusValue(t.status) === "inprogress") {
+      inProgress++;
+    } else {
+      notStarted++;
+    }
+
     const types = t.types.length ? t.types : [NO_TYPE];
     for (const type of types) {
-      const cur = typeMap.get(type) ?? { total: 0, done: 0 };
+      const cur = typeMap.get(type) ?? { total: 0, done: 0, inProgress: 0, notStarted: 0 };
       cur.total++;
       if (isDone(t)) cur.done++;
+      else if (isInProgress(t) || normalizeStatusValue(t.status) === "in progress" || normalizeStatusValue(t.status) === "inprogress") cur.inProgress++;
+      else cur.notStarted++;
       typeMap.set(type, cur);
     }
   }
 
-  const done = tasks.filter(isDone).length;
-  const usedTypes = new Set(typeMap.keys());
+  const total = tasks.length;
 
   return {
-    total: tasks.length,
+    total,
     done,
-    notDone: tasks.length - done,
-    donePct: tasks.length ? Math.round((done / tasks.length) * 100) : 0,
+    inProgress,
+    notStarted,
+    notDone: inProgress + notStarted,
+    donePct: total ? Math.round((done / total) * 100) : 0,
     byStatus: [...statusMap.entries()].sort((a, b) => b[1] - a[1]),
     byType: [...typeMap.entries()]
       .map(([type, v]) => ({ type, ...v }))
       .sort((a, b) => b.total - a.total),
-    unusedTypes: schema.typeOptions.filter((o) => !usedTypes.has(o)),
     notDoneTasks: tasks.filter((t) => !isDone(t)),
   };
 }
@@ -58,36 +83,30 @@ export function formatMetrics(m: Metrics, start: string, end: string): string {
   const bar = (n: number) => "█".repeat(Math.max(1, Math.round((n / max) * 10)));
 
   const lines: string[] = [];
-  lines.push(`📊 Неделя ${start} — ${end}`);
+  lines.push(`📊 Week ${start} — ${end}`);
   lines.push("");
-  lines.push(`Всего задач: ${m.total}`);
-  lines.push(`✅ Завершено: ${m.done} (${m.donePct}%)`);
-  lines.push(`⏳ Не завершено: ${m.notDone}`);
+  lines.push(`Total tasks: ${m.total}`);
+  lines.push(`✅ Completed: ${m.done} (${m.donePct}%)`);
+  lines.push(`🔄 In progress: ${m.inProgress}`);
+  lines.push(`⏳ Not started: ${m.notStarted}`);
 
   if (m.byStatus.length) {
     lines.push("");
-    lines.push("По статусам:");
+    lines.push("By status:");
     for (const [s, n] of m.byStatus) lines.push(`• ${s}: ${n}`);
   }
 
   if (m.byType.length) {
     lines.push("");
-    lines.push("Категории, куда ушло время:");
+    lines.push("Categories where time went:");
     for (const t of m.byType) {
-      lines.push(`${t.type}: ${bar(t.total)} ${t.total} (готово ${t.done}/${t.total})`);
+      lines.push(`${t.type}: ${bar(t.total)} ${t.total} (done ${t.done}/${t.total})`);
     }
   }
 
-  lines.push("");
-  lines.push(
-    m.unusedTypes.length
-      ? `🚫 Без внимания: ${m.unusedTypes.join(", ")}`
-      : "🚫 Без внимания: нет — все категории были затронуты"
-  );
-
   if (m.notDoneTasks.length) {
     lines.push("");
-    lines.push("Незавершённые задачи:");
+    lines.push("Open tasks:");
     for (const t of m.notDoneTasks) {
       const meta = [t.types.join("/") || null, t.date, t.status].filter(Boolean).join(", ");
       lines.push(`• ${t.name} (${meta})`);
@@ -97,24 +116,19 @@ export function formatMetrics(m: Metrics, start: string, end: string): string {
   return lines.join("\n");
 }
 
-/** Короткая подпись к картинкам. */
+/** Short caption for images. */
 export function formatCaption(m: Metrics, start: string, end: string): string {
-  const lines = [
-    `📊 Неделя ${start} — ${end}`,
-    `Всего: ${m.total} · ✅ ${m.done} (${m.donePct}%) · ⏳ ${m.notDone}`,
-  ];
-  lines.push(
-    m.unusedTypes.length
-      ? `🚫 Без внимания: ${m.unusedTypes.join(", ")}`
-      : "🚫 Без внимания: нет — все категории затронуты"
-  );
-  return lines.join("\n");
+  return [
+    `📊 Week ${start} — ${end}`,
+    `Total: ${m.total} · ✅ ${m.done} · 🔄 ${m.inProgress} · ⏳ ${m.notStarted}`,
+    `Done: ${m.donePct}%`,
+  ].join("\n");
 }
 
-/** Список незавершённых задач. */
+/** List of unfinished tasks. */
 export function formatUnfinished(m: Metrics): string | null {
   if (!m.notDoneTasks.length) return null;
-  const lines = ["⏳ Незавершённые задачи:"];
+  const lines = ["⏳ Open tasks:"];
   for (const t of m.notDoneTasks) {
     const meta = [t.types.join("/") || null, t.date, t.status].filter(Boolean).join(", ");
     lines.push(`• ${t.name} (${meta})`);
