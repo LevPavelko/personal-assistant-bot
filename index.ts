@@ -1,4 +1,5 @@
 import "dotenv/config";
+import http from "node:http";
 import { Bot, InputFile, InputMediaBuilder } from "grammy";
 import cron from "node-cron";
 import { fetchSchema, fetchTasks, fetchAllTasks, fetchAllPageIds, archivePages } from "./notion.js";
@@ -209,5 +210,22 @@ if (OWNER !== null && cronExpr) {
 }
 
 bot.catch((err) => console.error("Bot error:", err));
+
+const PORT = Number(process.env.PORT ?? 3000);
+const healthServer = http.createServer((req, res) => {
+  if (req.url === "/health") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true, service: "weekly-report-bot" }));
+    return;
+  }
+
+  res.writeHead(200, { "Content-Type": "text/plain" });
+  res.end("OK");
+});
+
+healthServer.listen(PORT, "0.0.0.0", () => {
+  console.log(`Health server started on 0.0.0.0:${PORT}`);
+});
+
 bot.start();
 console.log("Bot started");
